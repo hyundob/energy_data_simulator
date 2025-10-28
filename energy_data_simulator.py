@@ -231,9 +231,12 @@ def truncate_all_tables(connection):
         if cursor:
             cursor.close()
 
-def insert_data_to_postgresql(test_cases_lfd, test_cases_gen, test_cases_nwp, test_cases_kpx, test_cases_curt, test_cases_hg_gen, test_cases_hg_meas):
+def insert_data_to_postgresql(test_cases_lfd, test_cases_gen, test_cases_nwp, test_cases_kpx, test_cases_curt, test_cases_hg_gen, test_cases_hg_meas, only_tables=None):
     """
     PostgreSQL에 데이터 삽입 (일곱 테이블)
+    
+    Args:
+        only_tables (list): None이면 모든 테이블에 삽입, 리스트가 있으면 해당 테이블만 삽입
     """
     connection = get_db_connection()
     if not connection:
@@ -466,48 +469,50 @@ def insert_data_to_postgresql(test_cases_lfd, test_cases_gen, test_cases_nwp, te
         
         # HG_GEN 테이블 데이터 삽입
         inserted_hg_gen_count = 0
-        for i, case in enumerate(test_cases_hg_gen, 1):
-            try:
-                cursor.execute(insert_hg_gen_sql, (
-                    case['AREA_GRP_CD'],
-                    case['AREA_GRP_ID'],
-                    case['CRTN_TM'],
-                    case['FCST_TM'],
-                    case['LEAD_TM'],
-                    case['FCST_PROD_CD'],
-                    case['FCST_QGEN'],
-                    case['FCST_CAPA'],
-                    case['REG_DATE'],
-                    case['UPD_DATE']
-                ))
-                inserted_hg_gen_count += 1
-                # print(f"HG_GEN 데이터 {i} 삽입 완료")
-                
-            except psycopg2.Error as e:
-                print(f"HG_GEN 데이터 {i} 삽입 실패: {e}")
-                connection.rollback()
-                continue
+        if not only_tables or 'HG_GEN' in [t.upper() for t in only_tables]:
+            for i, case in enumerate(test_cases_hg_gen, 1):
+                try:
+                    cursor.execute(insert_hg_gen_sql, (
+                        case['AREA_GRP_CD'],
+                        case['AREA_GRP_ID'],
+                        case['CRTN_TM'],
+                        case['FCST_TM'],
+                        case['LEAD_TM'],
+                        case['FCST_PROD_CD'],
+                        case['FCST_QGEN'],
+                        case['FCST_CAPA'],
+                        case['REG_DATE'],
+                        case['UPD_DATE']
+                    ))
+                    inserted_hg_gen_count += 1
+                    # print(f"HG_GEN 데이터 {i} 삽입 완료")
+                    
+                except psycopg2.Error as e:
+                    print(f"HG_GEN 데이터 {i} 삽입 실패: {e}")
+                    connection.rollback()
+                    continue
         
         # HG_MEAS 테이블 데이터 삽입
         inserted_hg_meas_count = 0
-        for i, case in enumerate(test_cases_hg_meas, 1):
-            try:
-                cursor.execute(insert_hg_meas_sql, (
-                    case['TM'],
-                    case['AREA_GRP_CD'],
-                    case['AREA_GRP_ID'],
-                    case['HGEN_PROD'],
-                    case['HGEN_CAPA'],
-                    case['REG_DATE'],
-                    case['UPD_DATE']
-                ))
-                inserted_hg_meas_count += 1
-                # print(f"HG_MEAS 데이터 {i} 삽입 완료")
-                
-            except psycopg2.Error as e:
-                print(f"HG_MEAS 데이터 {i} 삽입 실패: {e}")
-                connection.rollback()
-                continue
+        if not only_tables or 'HG_MEAS' in [t.upper() for t in only_tables]:
+            for i, case in enumerate(test_cases_hg_meas, 1):
+                try:
+                    cursor.execute(insert_hg_meas_sql, (
+                        case['TM'],
+                        case['AREA_GRP_CD'],
+                        case['AREA_GRP_ID'],
+                        case['HGEN_PROD'],
+                        case['HGEN_CAPA'],
+                        case['REG_DATE'],
+                        case['UPD_DATE']
+                    ))
+                    inserted_hg_meas_count += 1
+                    # print(f"HG_MEAS 데이터 {i} 삽입 완료")
+                    
+                except psycopg2.Error as e:
+                    print(f"HG_MEAS 데이터 {i} 삽입 실패: {e}")
+                    connection.rollback()
+                    continue
         
         connection.commit()
         cursor.close()
@@ -523,7 +528,7 @@ def insert_data_to_postgresql(test_cases_lfd, test_cases_gen, test_cases_nwp, te
             connection.close()
         return False
 
-def generate_random_test_cases(num_cases=10, next_day=False):
+def generate_random_test_cases(num_cases=10, next_day=False, only_tables=None):
     """
     수요예측 데이터 테스트케이스 생성 함수
     00시부터 23시까지 한 시간 간격으로 데이터 생성 (24시간 운영)
@@ -531,6 +536,8 @@ def generate_random_test_cases(num_cases=10, next_day=False):
     Args:
         num_cases (int): 생성할 테스트 케이스 수 (기본값: 10)
         next_day (bool): True이면 다음날 데이터 생성, False이면 오늘 데이터 생성
+        only_tables (list): None이면 모든 테이블 생성, 리스트가 있으면 해당 테이블만 생성
+                           가능한 값: ['HG_GEN', 'HG_MEAS']
     """
     test_cases_lfd = []  # REP_DATA_RE_FCST_LFD_DA용
     test_cases_gen = []  # REP_DATA_RE_FCST_GEN_DA용
@@ -605,164 +612,167 @@ def generate_random_test_cases(num_cases=10, next_day=False):
         reg_date = crtn_time.strftime("%Y-%m-%d %H:%M:%S")
         upd_date = crtn_time.strftime("%Y-%m-%d %H:%M:%S")
         
-        # REP_DATA_RE_FCST_LFD_DA용 데이터
-        test_case_lfd = {
-            'CRTN_TM': crtn_tm,
-            'FCST_TM': fcst_tm,
-            'LEAD_TM': lead_tm,
-            'FCST_PROD_CD': fcst_prod_cd,
-            'FCST_QG01': fcst_qg01,
-            'FCST_QG02': fcst_qg02,
-            'FCST_QG03': fcst_qg03,
-            'FCST_QG04': fcst_qg04,
-            'FCST_QG05': fcst_qg05,
-            'FCST_QG06': fcst_qg06,
-            'FCST_QGEN': fcst_qgen,
-            'FCST_QGMX': fcst_qgmx,
-            'FCST_QGMN': fcst_qgmn,
-            'REG_DATE': reg_date,
-            'UPD_DATE': upd_date
-        }
-        
-        test_cases_lfd.append(test_case_lfd)
-        
-        # REP_DATA_RE_FCST_GEN_DA용 데이터 (각 연료 타입별로)
-        renewable_totals = {'SOLAR': 0, 'WIND': 0, 'HYDRO': 0, 'BIOMASS': 0, 'GEOTHERMAL': 0}
-        
-        for fuel_type in fuel_types:
-            # 신재생 발전량은 일반 수요량보다 작음
-            renewable_base = base_demand * random.uniform(0.1, 0.3)  # 10-30% 수준
-            
-            # 신재생 발전량들
-            renewable_qg01 = round(renewable_base * random.uniform(0.95, 1.05), 6)
-            renewable_qg02 = round(renewable_base * random.uniform(0.94, 1.06), 6)
-            renewable_qg03 = round(renewable_base * random.uniform(0.93, 1.07), 6)
-            renewable_qg04 = round(renewable_base * random.uniform(0.92, 1.08), 6)
-            renewable_qg05 = round(renewable_base * random.uniform(0.91, 1.09), 6)
-            renewable_qg06 = round(renewable_base * random.uniform(0.90, 1.10), 6)
-            
-            # 최종 신재생 발전량
-            renewable_qgen = round((renewable_qg01 + renewable_qg02 + renewable_qg03 + renewable_qg04 + renewable_qg05 + renewable_qg06) / 6, 6)
-            
-            # 최대값과 최소값
-            renewable_all_values = [renewable_qg01, renewable_qg02, renewable_qg03, renewable_qg04, renewable_qg05, renewable_qg06]
-            renewable_qgmx = round(max(renewable_all_values), 6)
-            renewable_qgmn = round(min(renewable_all_values), 6)
-            
-            # ESS 관련 데이터
-            fcst_capa = round(renewable_base * random.uniform(0.8, 1.2), 6)  # 설비용량
-            ess_chrg = round(renewable_base * random.uniform(0.05, 0.15), 6)  # ESS 충전
-            ess_disc = round(renewable_base * random.uniform(0.05, 0.15), 6)  # ESS 방전
-            ess_capa = round(renewable_base * random.uniform(0.1, 0.3), 6)    # ESS 용량
-            
-            # 합계 계산용
-            renewable_totals[fuel_type] = renewable_qgen
-            
-            test_case_gen = {
-                'PWR_EXC_TP_CD': f"{random.randint(1, 99):02d}",
-                'FUEL_TP_CD': fuel_type,
+        # REP_DATA_RE_FCST_LFD_DA용 데이터 (only_tables가 지정되지 않았을 때만 생성)
+        if not only_tables or 'LFD' in [t.upper() for t in only_tables]:
+            test_case_lfd = {
                 'CRTN_TM': crtn_tm,
                 'FCST_TM': fcst_tm,
                 'LEAD_TM': lead_tm,
                 'FCST_PROD_CD': fcst_prod_cd,
-                'FCST_QG01': renewable_qg01,
-                'FCST_QG02': renewable_qg02,
-                'FCST_QG03': renewable_qg03,
-                'FCST_QG04': renewable_qg04,
-                'FCST_QG05': renewable_qg05,
-                'FCST_QG06': renewable_qg06,
-                'FCST_QGEN': renewable_qgen,
-                'FCST_QGMX': renewable_qgmx,
-                'FCST_QGMN': renewable_qgmn,
-                'FCST_CAPA': fcst_capa,
-                'ESS_CHRG': ess_chrg,
-                'ESS_DISC': ess_disc,
-                'ESS_CAPA': ess_capa,
+                'FCST_QG01': fcst_qg01,
+                'FCST_QG02': fcst_qg02,
+                'FCST_QG03': fcst_qg03,
+                'FCST_QG04': fcst_qg04,
+                'FCST_QG05': fcst_qg05,
+                'FCST_QG06': fcst_qg06,
+                'FCST_QGEN': fcst_qgen,
+                'FCST_QGMX': fcst_qgmx,
+                'FCST_QGMN': fcst_qgmn,
                 'REG_DATE': reg_date,
                 'UPD_DATE': upd_date
             }
             
-            test_cases_gen.append(test_case_gen)
+            test_cases_lfd.append(test_case_lfd)
+        
+        # REP_DATA_RE_FCST_GEN_DA용 데이터 (각 연료 타입별로 - only_tables가 지정되지 않았을 때만 생성)
+        renewable_totals = {'SOLAR': 0, 'WIND': 0, 'HYDRO': 0, 'BIOMASS': 0, 'GEOTHERMAL': 0}
+        
+        if not only_tables or 'GEN' in [t.upper() for t in only_tables]:
+            for fuel_type in fuel_types:
+                # 신재생 발전량은 일반 수요량보다 작음
+                renewable_base = base_demand * random.uniform(0.1, 0.3)  # 10-30% 수준
+                
+                # 신재생 발전량들
+                renewable_qg01 = round(renewable_base * random.uniform(0.95, 1.05), 6)
+                renewable_qg02 = round(renewable_base * random.uniform(0.94, 1.06), 6)
+                renewable_qg03 = round(renewable_base * random.uniform(0.93, 1.07), 6)
+                renewable_qg04 = round(renewable_base * random.uniform(0.92, 1.08), 6)
+                renewable_qg05 = round(renewable_base * random.uniform(0.91, 1.09), 6)
+                renewable_qg06 = round(renewable_base * random.uniform(0.90, 1.10), 6)
+                
+                # 최종 신재생 발전량
+                renewable_qgen = round((renewable_qg01 + renewable_qg02 + renewable_qg03 + renewable_qg04 + renewable_qg05 + renewable_qg06) / 6, 6)
+                
+                # 최대값과 최소값
+                renewable_all_values = [renewable_qg01, renewable_qg02, renewable_qg03, renewable_qg04, renewable_qg05, renewable_qg06]
+                renewable_qgmx = round(max(renewable_all_values), 6)
+                renewable_qgmn = round(min(renewable_all_values), 6)
+                
+                # ESS 관련 데이터
+                fcst_capa = round(renewable_base * random.uniform(0.8, 1.2), 6)  # 설비용량
+                ess_chrg = round(renewable_base * random.uniform(0.05, 0.15), 6)  # ESS 충전
+                ess_disc = round(renewable_base * random.uniform(0.05, 0.15), 6)  # ESS 방전
+                ess_capa = round(renewable_base * random.uniform(0.1, 0.3), 6)    # ESS 용량
+                
+                # 합계 계산용
+                renewable_totals[fuel_type] = renewable_qgen
+                
+                test_case_gen = {
+                    'PWR_EXC_TP_CD': f"{random.randint(1, 99):02d}",
+                    'FUEL_TP_CD': fuel_type,
+                    'CRTN_TM': crtn_tm,
+                    'FCST_TM': fcst_tm,
+                    'LEAD_TM': lead_tm,
+                    'FCST_PROD_CD': fcst_prod_cd,
+                    'FCST_QG01': renewable_qg01,
+                    'FCST_QG02': renewable_qg02,
+                    'FCST_QG03': renewable_qg03,
+                    'FCST_QG04': renewable_qg04,
+                    'FCST_QG05': renewable_qg05,
+                    'FCST_QG06': renewable_qg06,
+                    'FCST_QGEN': renewable_qgen,
+                    'FCST_QGMX': renewable_qgmx,
+                    'FCST_QGMN': renewable_qgmn,
+                    'FCST_CAPA': fcst_capa,
+                    'ESS_CHRG': ess_chrg,
+                    'ESS_DISC': ess_disc,
+                    'ESS_CAPA': ess_capa,
+                    'REG_DATE': reg_date,
+                    'UPD_DATE': upd_date
+                }
+                
+                test_cases_gen.append(test_case_gen)
         
         # REP_DATA_HG_FCST_NWP_DA용 데이터 (시간당 하나씩만 생성)
-        # 기상 예측 데이터 생성
-        # 일사량 (W/m²) - 시간대별로 다른 값
-        if 0 <= hour <= 5:  # 새벽
-            fcst_srad = round(random.uniform(0, 50), 6)  # 0-50 W/m²
-        elif 6 <= hour <= 9:  # 오전
-            fcst_srad = round(random.uniform(200, 600), 6)  # 200-600 W/m²
-        elif 10 <= hour <= 16:  # 주간
-            fcst_srad = round(random.uniform(600, 1000), 6)  # 600-1000 W/m²
-        elif 17 <= hour <= 20:  # 오후
-            fcst_srad = round(random.uniform(300, 700), 6)  # 300-700 W/m²
-        elif 21 <= hour <= 23:  # 저녁
-            fcst_srad = round(random.uniform(0, 200), 6)  # 0-200 W/m²
-        else:  # 기타 시간
-            fcst_srad = round(random.uniform(0, 100), 6)  # 0-100 W/m²
-        
-        # 기온 (°C) - 시간대별로 다른 값
-        if 0 <= hour <= 5:  # 새벽
-            fcst_temp = round(random.uniform(10, 18), 6)
-        elif 6 <= hour <= 9:  # 오전
-            fcst_temp = round(random.uniform(15, 25), 6)
-        elif 10 <= hour <= 16:  # 주간
-            fcst_temp = round(random.uniform(20, 30), 6)
-        elif 17 <= hour <= 20:  # 오후
-            fcst_temp = round(random.uniform(18, 28), 6)
-        elif 21 <= hour <= 23:  # 저녁
-            fcst_temp = round(random.uniform(15, 22), 6)
-        else:  # 기타 시간
-            fcst_temp = round(random.uniform(12, 20), 6)
-        
-        # 습도 (%) - 시간대별로 다른 값
-        if 0 <= hour <= 5:  # 새벽
-            fcst_humi = round(random.uniform(70, 90), 6)
-        elif 6 <= hour <= 9:  # 오전
-            fcst_humi = round(random.uniform(60, 80), 6)
-        elif 10 <= hour <= 16:  # 주간
-            fcst_humi = round(random.uniform(40, 60), 6)
-        elif 17 <= hour <= 20:  # 오후
-            fcst_humi = round(random.uniform(50, 70), 6)
-        elif 21 <= hour <= 23:  # 저녁
-            fcst_humi = round(random.uniform(60, 80), 6)
-        else:  # 기타 시간
-            fcst_humi = round(random.uniform(65, 85), 6)
-        
-        # 풍속 (m/s) - 시간대별로 다른 값
-        if 0 <= hour <= 5:  # 새벽
-            fcst_wspd = round(random.uniform(1, 3), 6)
-        elif 6 <= hour <= 9:  # 오전
-            fcst_wspd = round(random.uniform(2, 5), 6)
-        elif 10 <= hour <= 16:  # 주간
-            fcst_wspd = round(random.uniform(3, 7), 6)
-        elif 17 <= hour <= 20:  # 오후
-            fcst_wspd = round(random.uniform(2, 6), 6)
-        elif 21 <= hour <= 23:  # 저녁
-            fcst_wspd = round(random.uniform(1, 4), 6)
-        else:  # 기타 시간
-            fcst_wspd = round(random.uniform(1, 3), 6)
-        
-        # 기압 (hPa) - 상대적으로 안정적
-        fcst_psfc = round(random.uniform(1010, 1020), 6)
-        
-        test_case_nwp = {
-            'PWR_EXC_TP_CD': '9',  # 무조건 9
-            'AREA_GRP_CD': '1',    # 무조건 1
-            'AREA_GRP_ID': '1',    # 무조건 1
-            'CRTN_TM': crtn_tm,
-            'FCST_TM': fcst_tm,
-            'LEAD_TM': lead_tm,
-            'FCST_PROD_CD': fcst_prod_cd,
-            'FCST_SRAD': fcst_srad,
-            'FCST_TEMP': fcst_temp,
-            'FCST_HUMI': fcst_humi,
-            'FCST_WSPD': fcst_wspd,
-            'FCST_PSFC': fcst_psfc,
-            'REG_DATE': reg_date,
-            'UPD_DATE': upd_date
-        }
-        
-        test_cases_nwp.append(test_case_nwp)
+        if not only_tables or 'NWP' in [t.upper() for t in only_tables]:
+            # 기상 예측 데이터 생성
+            # 일사량 (W/m²) - 시간대별로 다른 값
+            if 0 <= hour <= 5:  # 새벽
+                fcst_srad = round(random.uniform(0, 50), 6)  # 0-50 W/m²
+            elif 6 <= hour <= 9:  # 오전
+                fcst_srad = round(random.uniform(200, 600), 6)  # 200-600 W/m²
+            elif 10 <= hour <= 16:  # 주간
+                fcst_srad = round(random.uniform(600, 1000), 6)  # 600-1000 W/m²
+            elif 17 <= hour <= 20:  # 오후
+                fcst_srad = round(random.uniform(300, 700), 6)  # 300-700 W/m²
+            elif 21 <= hour <= 23:  # 저녁
+                fcst_srad = round(random.uniform(0, 200), 6)  # 0-200 W/m²
+            else:  # 기타 시간
+                fcst_srad = round(random.uniform(0, 100), 6)  # 0-100 W/m²
+            
+            # 기온 (°C) - 시간대별로 다른 값
+            if 0 <= hour <= 5:  # 새벽
+                fcst_temp = round(random.uniform(10, 18), 6)
+            elif 6 <= hour <= 9:  # 오전
+                fcst_temp = round(random.uniform(15, 25), 6)
+            elif 10 <= hour <= 16:  # 주간
+                fcst_temp = round(random.uniform(20, 30), 6)
+            elif 17 <= hour <= 20:  # 오후
+                fcst_temp = round(random.uniform(18, 28), 6)
+            elif 21 <= hour <= 23:  # 저녁
+                fcst_temp = round(random.uniform(15, 22), 6)
+            else:  # 기타 시간
+                fcst_temp = round(random.uniform(12, 20), 6)
+            
+            # 습도 (%) - 시간대별로 다른 값
+            if 0 <= hour <= 5:  # 새벽
+                fcst_humi = round(random.uniform(70, 90), 6)
+            elif 6 <= hour <= 9:  # 오전
+                fcst_humi = round(random.uniform(60, 80), 6)
+            elif 10 <= hour <= 16:  # 주간
+                fcst_humi = round(random.uniform(40, 60), 6)
+            elif 17 <= hour <= 20:  # 오후
+                fcst_humi = round(random.uniform(50, 70), 6)
+            elif 21 <= hour <= 23:  # 저녁
+                fcst_humi = round(random.uniform(60, 80), 6)
+            else:  # 기타 시간
+                fcst_humi = round(random.uniform(65, 85), 6)
+            
+            # 풍속 (m/s) - 시간대별로 다른 값
+            if 0 <= hour <= 5:  # 새벽
+                fcst_wspd = round(random.uniform(1, 3), 6)
+            elif 6 <= hour <= 9:  # 오전
+                fcst_wspd = round(random.uniform(2, 5), 6)
+            elif 10 <= hour <= 16:  # 주간
+                fcst_wspd = round(random.uniform(3, 7), 6)
+            elif 17 <= hour <= 20:  # 오후
+                fcst_wspd = round(random.uniform(2, 6), 6)
+            elif 21 <= hour <= 23:  # 저녁
+                fcst_wspd = round(random.uniform(1, 4), 6)
+            else:  # 기타 시간
+                fcst_wspd = round(random.uniform(1, 3), 6)
+            
+            # 기압 (hPa) - 상대적으로 안정적
+            fcst_psfc = round(random.uniform(1010, 1020), 6)
+            
+            test_case_nwp = {
+                'PWR_EXC_TP_CD': '9',  # 무조건 9
+                'AREA_GRP_CD': '1',    # 무조건 1
+                'AREA_GRP_ID': '1',    # 무조건 1
+                'CRTN_TM': crtn_tm,
+                'FCST_TM': fcst_tm,
+                'LEAD_TM': lead_tm,
+                'FCST_PROD_CD': fcst_prod_cd,
+                'FCST_SRAD': fcst_srad,
+                'FCST_TEMP': fcst_temp,
+                'FCST_HUMI': fcst_humi,
+                'FCST_WSPD': fcst_wspd,
+                'FCST_PSFC': fcst_psfc,
+                'REG_DATE': reg_date,
+                'UPD_DATE': upd_date
+            }
+            
+            test_cases_nwp.append(test_case_nwp)
         
         # REP_DATA_RE_KPX_JEJU_SUKUB_M용 데이터 (제주 계통 운영 정보)
         # 기준일시 (YYYYMMDDHHMI 형식)
@@ -817,50 +827,52 @@ def generate_random_test_cases(num_cases=10, next_day=False):
             test_cases_curt.append(test_case_curt)
         
         # REP_DATA_HG_FCST_GEN_GENT_DA용 데이터 (수소발전단지 수소 예측 생산량)
-        for area_group in area_groups:
-            for fuel_type in ['HYDROGEN']:  # 수소 발전만
-                # 수소 생산량 (MWh) - 시간대별로 다른 값
+        if not only_tables or 'HG_GEN' in [t.upper() for t in only_tables]:
+            for area_group in area_groups:
+                for fuel_type in ['HYDROGEN']:  # 수소 발전만
+                    # 수소 생산량 (MWh) - 시간대별로 다른 값
+                    if 6 <= hour <= 18:  # 주간 (수소 생산 활발)
+                        fcst_qgen = round(random.uniform(50, 200), 6)
+                        fcst_capa = round(random.uniform(100, 300), 6)
+                    else:  # 야간 (수소 생산 감소)
+                        fcst_qgen = round(random.uniform(20, 80), 6)
+                        fcst_capa = round(random.uniform(50, 150), 6)
+                    
+                    test_case_hg_gen = {
+                        'AREA_GRP_CD': area_group,
+                        'AREA_GRP_ID': f"{area_group}_H2_{random.randint(1, 999):03d}",
+                        'CRTN_TM': crtn_tm,
+                        'FCST_TM': fcst_tm,
+                        'LEAD_TM': lead_tm,
+                        'FCST_PROD_CD': fcst_prod_cd,
+                        'FCST_QGEN': fcst_qgen,
+                        'FCST_CAPA': fcst_capa,
+                        'REG_DATE': reg_date,
+                        'UPD_DATE': upd_date
+                    }
+                    test_cases_hg_gen.append(test_case_hg_gen)
+        
+        # REP_DATA_HG_MEAS_GEM_GENT_DA용 데이터 (수소발전단지 수소 생산량 정보)
+        if not only_tables or 'HG_MEAS' in [t.upper() for t in only_tables]:
+            for area_group in area_groups:
+                # 수소 생산량 (KG) - 시간대별로 다른 값
                 if 6 <= hour <= 18:  # 주간 (수소 생산 활발)
-                    fcst_qgen = round(random.uniform(50, 200), 6)
-                    fcst_capa = round(random.uniform(100, 300), 6)
+                    hgen_prod = round(random.uniform(1000, 5000), 5)
+                    hgen_capa = round(random.uniform(2000, 8000), 5)
                 else:  # 야간 (수소 생산 감소)
-                    fcst_qgen = round(random.uniform(20, 80), 6)
-                    fcst_capa = round(random.uniform(50, 150), 6)
+                    hgen_prod = round(random.uniform(500, 2000), 5)
+                    hgen_capa = round(random.uniform(1000, 4000), 5)
                 
-                test_case_hg_gen = {
+                test_case_hg_meas = {
+                    'TM': tm,
                     'AREA_GRP_CD': area_group,
                     'AREA_GRP_ID': f"{area_group}_H2_{random.randint(1, 999):03d}",
-                    'CRTN_TM': crtn_tm,
-                    'FCST_TM': fcst_tm,
-                    'LEAD_TM': lead_tm,
-                    'FCST_PROD_CD': fcst_prod_cd,
-                    'FCST_QGEN': fcst_qgen,
-                    'FCST_CAPA': fcst_capa,
+                    'HGEN_PROD': hgen_prod,
+                    'HGEN_CAPA': hgen_capa,
                     'REG_DATE': reg_date,
                     'UPD_DATE': upd_date
                 }
-                test_cases_hg_gen.append(test_case_hg_gen)
-        
-        # REP_DATA_HG_MEAS_GEM_GENT_DA용 데이터 (수소발전단지 수소 생산량 정보)
-        for area_group in area_groups:
-            # 수소 생산량 (KG) - 시간대별로 다른 값
-            if 6 <= hour <= 18:  # 주간 (수소 생산 활발)
-                hgen_prod = round(random.uniform(1000, 5000), 5)
-                hgen_capa = round(random.uniform(2000, 8000), 5)
-            else:  # 야간 (수소 생산 감소)
-                hgen_prod = round(random.uniform(500, 2000), 5)
-                hgen_capa = round(random.uniform(1000, 4000), 5)
-            
-            test_case_hg_meas = {
-                'TM': tm,
-                'AREA_GRP_CD': area_group,
-                'AREA_GRP_ID': f"{area_group}_H2_{random.randint(1, 999):03d}",
-                'HGEN_PROD': hgen_prod,
-                'HGEN_CAPA': hgen_capa,
-                'REG_DATE': reg_date,
-                'UPD_DATE': upd_date
-            }
-            test_cases_hg_meas.append(test_case_hg_meas)
+                test_cases_hg_meas.append(test_case_hg_meas)
     
     return test_cases_lfd, test_cases_gen, test_cases_nwp, test_cases_kpx, test_cases_curt, test_cases_hg_gen, test_cases_hg_meas
 
@@ -1085,23 +1097,29 @@ def generate_sql_insert_statements(test_cases_lfd, test_cases_gen, test_cases_nw
         print(f"    TO_TIMESTAMP('{case['REG_DATE']}', 'YYYY-MM-DD HH24:MI:SS'), TO_TIMESTAMP('{case['UPD_DATE']}', 'YYYY-MM-DD HH24:MI:SS')")
         print(");")
 
-def run_daily_simulation(next_day=False):
+def run_daily_simulation(next_day=False, only_tables=None):
     """
     일일 시뮬레이션 실행 함수
     
     Args:
         next_day (bool): True이면 다음날 데이터 생성, False이면 오늘 데이터 생성
+        only_tables (list): None이면 모든 테이블 생성, 리스트가 있으면 해당 테이블만 생성
+                           가능한 값: ['HG_GEN', 'HG_MEAS']
     """
     date_label = "다음날" if next_day else "오늘"
+    table_label = ""
+    if only_tables:
+        table_label = f" - 선택된 테이블: {', '.join(only_tables)}"
+    
     print(f"\n{'='*60}")
-    print(f"일일 에너지 데이터 시뮬레이션 시작 ({date_label}) - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"일일 에너지 데이터 시뮬레이션 시작 ({date_label}){table_label} - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}")
     
     # 랜덤 시드 설정 (재현 가능한 결과를 위해)
     random.seed(int(time.time()))
     
     # 00시부터 23시까지의 데이터 생성 (24시간 운영, 24개 시간대)
-    test_cases_lfd, test_cases_gen, test_cases_nwp, test_cases_kpx, test_cases_curt, test_cases_hg_gen, test_cases_hg_meas = generate_random_test_cases(next_day=next_day)
+    test_cases_lfd, test_cases_gen, test_cases_nwp, test_cases_kpx, test_cases_curt, test_cases_hg_gen, test_cases_hg_meas = generate_random_test_cases(next_day=next_day, only_tables=only_tables)
     
     # 결과 출력 (주석처리)
     # print_test_cases(test_cases_lfd, test_cases_gen, test_cases_nwp, test_cases_kpx, test_cases_curt, test_cases_hg_gen, test_cases_hg_meas)
@@ -1111,10 +1129,10 @@ def run_daily_simulation(next_day=False):
     print("PostgreSQL 데이터 삽입 시도")
     print(f"{'='*60}")
     
-    success = insert_data_to_postgresql(test_cases_lfd, test_cases_gen, test_cases_nwp, test_cases_kpx, test_cases_curt, test_cases_hg_gen, test_cases_hg_meas)
+    success = insert_data_to_postgresql(test_cases_lfd, test_cases_gen, test_cases_nwp, test_cases_kpx, test_cases_curt, test_cases_hg_gen, test_cases_hg_meas, only_tables=only_tables)
     
     if success:
-        print(f"\n✅ 일일 시뮬레이션이 성공적으로 완료되었습니다! - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print(f"\n일일 시뮬레이션이 성공적으로 완료되었습니다! - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     else:
         print(f"\n⚠️ 데이터베이스 연결에 실패했지만 데이터는 성공적으로 생성되었습니다. - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
@@ -1164,7 +1182,17 @@ if __name__ == "__main__":
             next_day = "--next-day" in sys.argv
             if next_day:
                 print("📅 다음날 데이터를 생성합니다.")
-            run_daily_simulation(next_day=next_day)
+            
+            # --only 옵션 처리
+            only_tables = None
+            if "--only" in sys.argv:
+                only_idx = sys.argv.index("--only")
+                if only_idx + 1 < len(sys.argv):
+                    only_value = sys.argv[only_idx + 1]
+                    only_tables = [t.strip().upper() for t in only_value.split(',')]
+                    print(f"선택된 테이블만 생성: {', '.join(only_tables)}")
+            
+            run_daily_simulation(next_day=next_day, only_tables=only_tables)
         elif sys.argv[1] == "--truncate":
             # 테이블 데이터 삭제 모드
             print("테이블 데이터 삭제 모드")
@@ -1180,15 +1208,18 @@ if __name__ == "__main__":
             print("에너지 데이터 시뮬레이터")
             print("=" * 50)
             print("사용법:")
-            print("  python energy_data_simulator.py                    # 스케줄링 모드 (매일 24시 자동 실행)")
-            print("  python energy_data_simulator.py --manual          # 수동 실행 모드 (오늘 데이터)")
-            print("  python energy_data_simulator.py --manual --next-day # 수동 실행 모드 (다음날 데이터)")
-            print("  python energy_data_simulator.py --truncate        # 모든 테이블 데이터 삭제")
-            print("  python energy_data_simulator.py --help            # 도움말 표시")
+            print("  python energy_data_simulator.py                              # 스케줄링 모드 (매일 24시 자동 실행)")
+            print("  python energy_data_simulator.py --manual                     # 수동 실행 모드 (오늘 데이터, 모든 테이블)")
+            print("  python energy_data_simulator.py --manual --next-day          # 수동 실행 모드 (다음날 데이터)")
+            print("  python energy_data_simulator.py --manual --only HG_GEN,HG_MEAS # 특정 테이블만 생성")
+            print("  python energy_data_simulator.py --truncate                   # 모든 테이블 데이터 삭제")
+            print("  python energy_data_simulator.py --help                       # 도움말 표시")
             print("")
             print("옵션 설명:")
             print("  --manual     : 수동으로 데이터를 생성합니다.")
             print("  --next-day   : 다음날 데이터를 생성합니다. (--manual과 함께 사용)")
+            print("  --only       : 특정 테이블만 생성합니다. (예: --only HG_GEN,HG_MEAS)")
+            print("                가능한 값: HG_GEN, HG_MEAS")
             print("  --truncate   : 모든 테이블의 데이터를 삭제합니다.")
             print("  --help       : 이 도움말을 표시합니다.")
         else:
